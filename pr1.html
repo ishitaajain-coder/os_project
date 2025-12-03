@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Interactive Disk Scheduling Simulator</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="header">
+  <h1>Disk Scheduling Simulator</h1>
+  <p class="subtitle">Learn disk scheduling algorithms with interactive animations</p>
+</div>
+
+<div class="main-container">
+  <!-- Left Panel: Input Controls -->
+  <div class="panel input-panel">
+    <h3>Configuration</h3>
+    
+    <label for="requests">Disk Requests (comma-separated):</label>
+    <input type="text" id="requests" placeholder="e.g. 98,183,37,122,14,124,65,67" value="98,183,37,122,14,124,65,67" />
+    
+    <label for="head">Initial Head Position:</label>
+    <input type="number" id="head" value="53" min="0" />
+
+    <label for="maxCylinder">Max Cylinder Number:</label>
+    <input type="number" id="maxCylinder" value="199" min="1" />
+
+    <label for="algorithm">Select Algorithm:</label>
+    <select id="algorithm">
+      <option value="USER_ORDER">User Input Order (Custom Sequence)</option>
+      <option value="FCFS">FCFS (First Come First Serve)</option>
+      <option value="SSTF">SSTF (Shortest Seek Time First)</option>
+      <option value="SCAN">SCAN (Elevator Algorithm)</option>
+      <option value="CSCAN">C-SCAN (Circular SCAN)</option>
+    </select>
+
+    <button id="startBtn" class="btn btn-primary">Start Simulation</button>
+    
+    <div class="metrics-box">
+      <h4>Performance Metrics</h4>
+      <p>Total Head Movement: <span id="totalSeek">0</span></p>
+      <p>Average Seek Time: <span id="avgSeek">0</span></p>
+      <p>Number of Requests: <span id="numRequests">0</span></p>
+      <p>Current Step: <span id="currentStepDisplay">0</span> / <span id="totalSteps">0</span></p>
+    </div>
+  </div>
+
+  <!-- Center Panel: Visualization -->
+  <div class="panel visualization-panel">
+    <h3>Visualization</h3>
+    <canvas id="diskCanvas" width="700" height="400"></canvas>
+    
+    <div class="controls">
+      <button id="playBtn" class="btn btn-control" disabled>▶ Play</button>
+      <button id="pauseBtn" class="btn btn-control" disabled>⏸ Pause</button>
+      <button id="prevBtn" class="btn btn-control" disabled>⏮ Previous</button>
+      <button id="nextBtn" class="btn btn-control" disabled>⏭ Next</button>
+      <button id="resetBtn" class="btn btn-control" disabled>🔄 Reset</button>
+      
+      <div class="speed-control">
+        <label for="speedSlider">Speed:</label>
+        <input type="range" id="speedSlider" min="1" max="5" value="3" />
+        <span id="speedValue">3x</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Panel: Explanation -->
+  <div class="panel explanation-panel">
+    <h3>Algorithm Explanation</h3>
+    <div id="algorithmDescription" class="description-box">
+      <p>Select an algorithm and start the simulation to see step-by-step explanations.</p>
+    </div>
+    
+    <h4>Service Order</h4>
+    <div id="serviceOrder" class="service-order-box">
+      <p>Start simulation to see the order...</p>
+    </div>
+    
+    <h4>Current Step Details</h4>
+    <div id="stepDetails" class="step-details-box">
+      <p>No step in progress</p>
+    </div>
+  </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
