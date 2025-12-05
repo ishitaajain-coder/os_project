@@ -3,88 +3,364 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Interactive Disk Scheduling Simulator</title>
-<link rel="stylesheet" href="style.css" />
+<title>Disk Scheduling Simulator</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .container {
+    display: flex;
+    max-width: 900px;
+    width: 100%;
+  }
+  .controls, .metrics {
+    width: 250px;
+    margin-right: 20px;
+  }
+  .controls label {
+    display: block;
+    margin: 10px 0 5px;
+  }
+  .metrics p {
+    margin: 5px 0;
+  }
+  .visualization {
+    flex-grow: 1;
+    position: relative;
+  }
+  canvas {
+    border: 1px solid #ccc;
+    width: 100%;
+    height: 150px;
+    display: block;
+  }
+  table {
+    width: 100%;
+    margin-top: 10px;
+    border-collapse: collapse;
+  }
+  th, td {
+    border: 1px solid #aaa;
+    padding: 4px 6px;
+    text-align: center;
+  }
+  button {
+    margin-top: 15px;
+    padding: 8px 12px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+</style>
 </head>
 <body>
-<div class="header">
-  <h1>Disk Scheduling Simulator</h1>
-  <p class="subtitle">Learn disk scheduling algorithms with interactive animations</p>
-</div>
-
-<div class="main-container">
-  <!-- Left Panel: Input Controls -->
-  <div class="panel input-panel">
-    <h3>Configuration</h3>
-    
+<h2>Disk Scheduling Simulator</h2>
+<div class="container">
+  <div class="controls">
     <label for="requests">Disk Requests (comma-separated):</label>
-    <input type="text" id="requests" placeholder="e.g. 98,183,37,122,14,124,65,67" value="98,183,37,122,14,124,65,67" />
+    <input type="text" id="requests" placeholder="e.g. 98,183,37,122,14" />
     
     <label for="head">Initial Head Position:</label>
-    <input type="number" id="head" value="53" min="0" />
+    <input type="number" id="head" value="50" min="0" />
 
     <label for="maxCylinder">Max Cylinder Number:</label>
     <input type="number" id="maxCylinder" value="199" min="1" />
 
     <label for="algorithm">Select Algorithm:</label>
     <select id="algorithm">
-      <option value="USER_ORDER">User Input Order (Custom Sequence)</option>
-      <option value="FCFS">FCFS (First Come First Serve)</option>
-      <option value="SSTF">SSTF (Shortest Seek Time First)</option>
-      <option value="SCAN">SCAN (Elevator Algorithm)</option>
-      <option value="CSCAN">C-SCAN (Circular SCAN)</option>
+      <option value="FCFS">FCFS</option>
+      <option value="SSTF">SSTF</option>
+      <option value="SCAN">SCAN</option>
+      <option value="CSCAN">C-SCAN</option>
     </select>
 
-    <button id="startBtn" class="btn btn-primary">Start Simulation</button>
-    
-    <div class="metrics-box">
-      <h4>Performance Metrics</h4>
-      <p>Total Head Movement: <span id="totalSeek">0</span></p>
-      <p>Average Seek Time: <span id="avgSeek">0</span></p>
-      <p>Number of Requests: <span id="numRequests">0</span></p>
-      <p>Current Step: <span id="currentStepDisplay">0</span> / <span id="totalSteps">0</span></p>
-    </div>
+    <button id="runBtn">Run Simulation</button>
   </div>
 
-  <!-- Center Panel: Visualization -->
-  <div class="panel visualization-panel">
-    <h3>Visualization</h3>
-    <canvas id="diskCanvas" width="700" height="400"></canvas>
-    
-    <div class="controls">
-      <button id="playBtn" class="btn btn-control" disabled>▶ Play</button>
-      <button id="pauseBtn" class="btn btn-control" disabled>⏸ Pause</button>
-      <button id="prevBtn" class="btn btn-control" disabled>⏮ Previous</button>
-      <button id="nextBtn" class="btn btn-control" disabled>⏭ Next</button>
-      <button id="resetBtn" class="btn btn-control" disabled>🔄 Reset</button>
-      
-      <div class="speed-control">
-        <label for="speedSlider">Speed:</label>
-        <input type="range" id="speedSlider" min="1" max="5" value="3" />
-        <span id="speedValue">3x</span>
-      </div>
-    </div>
+  <div class="visualization">
+    <canvas id="diskCanvas" width="600" height="150"></canvas>
+    <table id="orderTable">
+      <thead>
+        <tr><th>Order</th><th>Cylinder</th><th>Cumulative Seek</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
   </div>
 
-  <!-- Right Panel: Explanation -->
-  <div class="panel explanation-panel">
-    <h3>Algorithm Explanation</h3>
-    <div id="algorithmDescription" class="description-box">
-      <p>Select an algorithm and start the simulation to see step-by-step explanations.</p>
-    </div>
-    
-    <h4>Service Order</h4>
-    <div id="serviceOrder" class="service-order-box">
-      <p>Start simulation to see the order...</p>
-    </div>
-    
-    <h4>Current Step Details</h4>
-    <div id="stepDetails" class="step-details-box">
-      <p>No step in progress</p>
-    </div>
+  <div class="metrics">
+    <h3>Metrics</h3>
+    <p>Total Head Movement: <span id="totalSeek">0</span></p>
+    <p>Average Seek Time: <span id="avgSeek">0</span></p>
+    <p>Throughput (requests/sec): <span id="throughput">0</span></p>
   </div>
 </div>
 
-<script src="script.js"></script>
+<script>
+  const canvas = document.getElementById('diskCanvas');
+  const ctx = canvas.getContext('2d');
+
+  const requestsInput = document.getElementById('requests');
+  const headInput = document.getElementById('head');
+  const maxCylinderInput = document.getElementById('maxCylinder');
+  const algorithmSelect = document.getElementById('algorithm');
+  const runBtn = document.getElementById('runBtn');
+
+  const totalSeekElem = document.getElementById('totalSeek');
+  const avgSeekElem = document.getElementById('avgSeek');
+  const throughputElem = document.getElementById('throughput');
+  const orderTableBody = document.querySelector('#orderTable tbody');
+
+  let animationId;
+
+  function parseRequests(str) {
+    return str.split(',').map(x => parseInt(x.trim())).filter(x => !isNaN(x));
+  }
+
+  function clampRequests(requests, maxCylinder) {
+    return requests.filter(r => r >= 0 && r <= maxCylinder);
+  }
+
+  function fcfs(requests, head) {
+    const order = [...requests];
+    let totalSeek = 0;
+    let last = head;
+    for (let r of requests) {
+      totalSeek += Math.abs(r - last);
+      last = r;
+    }
+    return { order, totalSeek };
+  }
+
+  function sstf(requests, head) {
+    let reqs = [...requests];
+    let order = [];
+    let totalSeek = 0;
+    let current = head;
+
+    while (reqs.length > 0) {
+      let closestIdx = 0;
+      let closestDist = Math.abs(reqs[0] - current);
+      for (let i = 1; i < reqs.length; i++) {
+        const dist = Math.abs(reqs[i] - current);
+        if (dist < closestDist) {
+          closestDist = dist;
+          closestIdx = i;
+        }
+      }
+      order.push(reqs[closestIdx]);
+      totalSeek += closestDist;
+      current = reqs[closestIdx];
+      reqs.splice(closestIdx, 1);
+    }
+    return { order, totalSeek };
+  }
+
+  function scan(requests, head, maxCylinder) {
+    let order = [];
+    let totalSeek = 0;
+    let current = head;
+    let left = requests.filter(r => r < head).sort((a,b) => b - a); // Desc
+    let right = requests.filter(r => r >= head).sort((a,b) => a - b);  // Asc
+
+    // Move right first, then left
+    for (let r of right) {
+      totalSeek += Math.abs(r - current);
+      current = r;
+      order.push(r);
+    }
+    // If head moves to end of disk before reverse
+    if (right.length > 0 && current !== maxCylinder) {
+      totalSeek += (maxCylinder - current);
+      current = maxCylinder;
+    }
+    for (let r of left) {
+      totalSeek += Math.abs(r - current);
+      current = r;
+      order.push(r);
+    }
+    return { order, totalSeek };
+  }
+
+  function cscan(requests, head, maxCylinder) {
+    let order = [];
+    let totalSeek = 0;
+    let current = head;
+    let left = requests.filter(r => r < head).sort((a,b) => a - b); // Asc
+    let right = requests.filter(r => r >= head).sort((a,b) => a - b);  // Asc
+
+    // Move right first
+    for (let r of right) {
+      totalSeek += Math.abs(r - current);
+      current = r;
+      order.push(r);
+    }
+    if (right.length > 0 && current !== maxCylinder) {
+      // Move to max cylinder end
+      totalSeek += (maxCylinder - current);
+      current = maxCylinder;
+    }
+    // Jump to start (0)
+    totalSeek += maxCylinder; // jump from end to start
+    current = 0;
+    
+    for (let r of left) {
+      totalSeek += Math.abs(r - current);
+      current = r;
+      order.push(r);
+    }
+    return { order, totalSeek };
+  }
+
+  function drawDisk(requests, head, order, maxCylinder) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Coordinates helpers
+    const margin = 40;
+    const usableWidth = canvas.width - 2 * margin;
+    function getX(cyl) {
+      return margin + (cyl / maxCylinder) * usableWidth;
+    }
+
+    // Draw line for cylinders
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(margin, 50);
+    ctx.lineTo(canvas.width - margin, 50);
+    ctx.stroke();
+
+    // Draw cylinder ticks and labels every 20
+    ctx.fillStyle = '#666';
+    ctx.font = '10px Arial';
+    for (let tick = 0; tick <= maxCylinder; tick += 20) {
+      let x = getX(tick);
+      ctx.beginPath();
+      ctx.moveTo(x, 45);
+      ctx.lineTo(x, 55);
+      ctx.stroke();
+      ctx.fillText(tick, x - 10, 70);
+    }
+
+    // Draw request points
+    ctx.fillStyle = 'blue';
+    for (let r of requests) {
+      let x = getX(r);
+      ctx.beginPath();
+      ctx.arc(x, 50, 6, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+
+    // Draw initial head position marker
+    ctx.fillStyle = 'green';
+    let headX = getX(head);
+    ctx.beginPath();
+    ctx.arc(headX, 50, 8, 0, 2 * Math.PI);
+    ctx.fill();
+
+    // Animate head movement along the order path
+    if (!order || order.length === 0) return;
+
+    let path = [head, ...order];
+    let index = 0;
+    let animationProgress = 0;
+    const speed = 2; // pixels per frame
+
+    function animate() {
+      ctx.clearRect(0, 80, canvas.width, 70); // clear below line area
+      ctx.strokeStyle = 'red';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      for (let i = 0; i < path.length; i++) {
+        let x = getX(path[i]);
+        let y = 100;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      // Calculate current position of head in animation
+      if (index >= path.length - 1) {
+        cancelAnimationFrame(animationId);
+        return;
+      }
+      // Move head from path[index] to path[index+1]
+      let startX = getX(path[index]);
+      let endX = getX(path[index + 1]);
+      let dist = endX - startX;
+      let step = speed * Math.sign(dist);
+      animationProgress += step;
+
+      if ((step > 0 && animationProgress >= dist) || (step < 0 && animationProgress <= dist)) {
+        index++;
+        animationProgress = 0;
+      }
+
+      let currX = startX + animationProgress;
+      // Draw moving head
+      ctx.fillStyle = 'orange';
+      ctx.beginPath();
+      ctx.arc(currX, 100, 10, 0, 2 * Math.PI);
+      ctx.fill();
+
+      animationId = requestAnimationFrame(animate);
+    }
+
+    animate();
+  }
+
+  function displayOrderTable(order, head) {
+    orderTableBody.innerHTML = '';
+    let cumulativeSeek = 0;
+    let last = head;
+    order.forEach((cyl, i) => {
+      cumulativeSeek += Math.abs(cyl - last);
+      last = cyl;
+      const row = document.createElement('tr');
+      row.innerHTML = `<td>${i + 1}</td><td>${cyl}</td><td>${cumulativeSeek}</td>`;
+      orderTableBody.appendChild(row);
+    });
+  }
+
+  runBtn.onclick = () => {
+    if (animationId) cancelAnimationFrame(animationId);
+    let requests = parseRequests(requestsInput.value);
+    const head = parseInt(headInput.value);
+    const maxCylinder = parseInt(maxCylinderInput.value);
+    requests = clampRequests(requests, maxCylinder);
+
+    if (requests.length === 0) {
+      alert('Please enter valid disk requests within max cylinder range.');
+      return;
+    }
+    if (head < 0 || head > maxCylinder) {
+      alert('Initial head position must be within 0 and max cylinder.');
+      return;
+    }
+
+    let result;
+    switch (algorithmSelect.value) {
+      case 'FCFS': result = fcfs(requests, head); break;
+      case 'SSTF': result = sstf(requests, head); break;
+      case 'SCAN': result = scan(requests, head, maxCylinder); break;
+      case 'CSCAN': result = cscan(requests, head, maxCylinder); break;
+      default: alert('Unknown algorithm'); return;
+    }
+
+    const avgSeek = (result.totalSeek / requests.length).toFixed(2);
+    // Assuming each seek unit time = 1 ms for throughput calculation
+    const throughput = (requests.length / (result.totalSeek / 1000)).toFixed(2);
+
+    totalSeekElem.textContent = result.totalSeek;
+    avgSeekElem.textContent = avgSeek;
+    throughputElem.textContent = throughput;
+
+    displayOrderTable(result.order, head);
+    drawDisk(requests, head, result.order, maxCylinder);
+  };
+</script>
+
 </body>
 </html>
