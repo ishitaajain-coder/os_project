@@ -61,8 +61,8 @@ function scan(requests, head, maxCylinder) {
   let order = [];
   let totalSeek = 0;
   let current = head;
-  let left = requests.filter(r => r < head).sort((a,b) => b - a); // Desc
-  let right = requests.filter(r => r >= head).sort((a,b) => a - b);  // Asc
+  let left = requests.filter(r => r < head).sort((a,b) => b - a);
+  let right = requests.filter(r => r >= head).sort((a,b) => a - b);
 
   for (let r of right) {
     totalSeek += Math.abs(r - current);
@@ -85,7 +85,7 @@ function cscan(requests, head, maxCylinder) {
   let order = [];
   let totalSeek = 0;
   let current = head;
-  let left = requests.filter(r => r < head).sort((a,b) => a - b); // Asc
+  let left = requests.filter(r => r < head).sort((a,b) => a - b);
   let right = requests.filter(r => r >= head).sort((a,b) => a - b);
 
   for (let r of right) {
@@ -97,8 +97,7 @@ function cscan(requests, head, maxCylinder) {
     totalSeek += (maxCylinder - current);
     current = maxCylinder;
   }
-  // Jump from maxCylinder to 0
-  totalSeek += maxCylinder;
+  totalSeek += maxCylinder; // jump from end to start
   current = 0;
   for (let r of left) {
     totalSeek += Math.abs(r - current);
@@ -108,109 +107,136 @@ function cscan(requests, head, maxCylinder) {
   return { order, totalSeek };
 }
 
-function drawDisk(requests, head, order, maxCylinder) {
+function drawZigzag(requests, head, order, maxCylinder) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.font = '12px Arial';
+  ctx.fillStyle = '#444';
 
-  const margin = 40;
-  const usableWidth = canvas.width - 2 * margin;
-  function getX(cyl) {
-    return margin + (cyl / maxCylinder) * usableWidth;
+  const marginTop = 20;
+  const marginBottom = 20;
+  const usableHeight = canvas.height - marginTop - marginBottom;
+
+  function getY(cyl) {
+    return marginTop + usableHeight * (cyl / maxCylinder);
   }
 
-  // Draw base line for cylinders
-  ctx.strokeStyle = '#444';
+  // Left vertical line (cylinder scale)
+  const leftX = 80;
+  ctx.strokeStyle = '#666';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(margin, 50);
-  ctx.lineTo(canvas.width - margin, 50);
+  ctx.moveTo(leftX, marginTop);
+  ctx.lineTo(leftX, canvas.height - marginBottom);
   ctx.stroke();
 
-  // Draw ticks and labels every 20 cylinders
+  // Right vertical line (step markers)
+  const rightX = 300;
+  ctx.beginPath();
+  ctx.moveTo(rightX, marginTop);
+  ctx.lineTo(rightX, canvas.height - marginBottom);
+  ctx.stroke();
+
+  // Cylinder ticks and labels on left
   ctx.fillStyle = '#666';
-  ctx.font = '10px Arial';
-  for (let tick = 0; tick <= maxCylinder; tick += 20) {
-    let x = getX(tick);
+  for (let cyl = 0; cyl <= maxCylinder; cyl += Math.max(1, Math.floor(maxCylinder / 10))) {
+    let y = getY(cyl);
     ctx.beginPath();
-    ctx.moveTo(x, 45);
-    ctx.lineTo(x, 55);
+    ctx.moveTo(leftX - 6, y);
+    ctx.lineTo(leftX + 6, y);
     ctx.stroke();
-    ctx.fillText(tick, x - 10, 70);
+    ctx.fillText(cyl, leftX - 40, y + 4);
   }
 
-  // Draw request points
+  // Draw request points on left line
   ctx.fillStyle = 'blue';
-  for (let r of requests) {
-    let x = getX(r);
+  for (const r of requests) {
+    const y = getY(r);
     ctx.beginPath();
-    ctx.arc(x, 50, 6, 0, 2 * Math.PI);
+    ctx.arc(leftX, y, 6, 0, 2 * Math.PI);
     ctx.fill();
   }
 
-  // Draw initial head position
+  // Initial head position
   ctx.fillStyle = 'green';
-  let headX = getX(head);
   ctx.beginPath();
-  ctx.arc(headX, 50, 8, 0, 2 * Math.PI);
+  ctx.arc(leftX, getY(head), 8, 0, 2 * Math.PI);
   ctx.fill();
 }
 
-let index, animationFrameCount, pathPoints;
+let currentStep = 0;
+let stepProgress = 0;
 
-function animateSmooth() {
-  ctx.clearRect(0, 80, canvas.width, 70);
+function animateZigzag(order, head, maxCylinder) {
+  const marginTop = 20;
+  const marginBottom = 20;
+  const usableHeight = canvas.height - marginTop - marginBottom;
+  const leftX = 80;
+  const rightX = 300;
 
-  ctx.strokeStyle = 'red';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  for (let i = 0; i < pathPoints.length; i++) {
-    let x = getX(pathPoints[i]);
-    let y = 100;
-    if (i === 0) ctx.moveTo(x, y);
-    else {
-      let prevX = getX(pathPoints[i - 1]);
-      let ctrlX = (prevX + x) / 2;
-      ctx.quadraticCurveTo(ctrlX, y - 20, x, y);
-    }
+  function getY(cyl) {
+    return marginTop + usableHeight * (cyl / maxCylinder);
   }
-  ctx.stroke();
 
-  if (index >= pathPoints.length - 1) {
+  if (currentStep >= order.length) {
     cancelAnimationFrame(animationId);
     return;
   }
 
-  const framesPerStep = 30;
-  animationFrameCount++;
-  const startX = getX(pathPoints[index]);
-  const endX = getX(pathPoints[index + 1]);
-  const progress = animationFrameCount / framesPerStep;
-  const currX = startX + (endX - startX) * progress;
+  // Clear animation area (right side)
+  ctx.clearRect(leftX + 10, 0, canvas.width - leftX - 10, canvas.height);
 
-  ctx.fillStyle = 'orange';
-  ctx.shadowColor = 'rgba(255, 165, 0, 0.7)';
-  ctx.shadowBlur = 15;
+  // Draw zigzag path trace so far
+  ctx.strokeStyle = 'red';
+  ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.arc(currX, 100, 12, 0, 2 * Math.PI);
+  ctx.moveTo(rightX, getY(head));
+  for (let i = 0; i < currentStep; i++) {
+    ctx.lineTo(rightX, getY(order[i]));
+    ctx.lineTo(rightX + 40, getY(order[i]));
+  }
+
+  // Partial move animation for current step:
+  let startY = currentStep === 0 ? getY(head) : getY(order[currentStep - 1]);
+  let endY = getY(order[currentStep]);
+  let interpY = startY + (endY - startY) * (stepProgress / stepDurationFrames);
+
+  ctx.lineTo(rightX, interpY);
+
+  if (stepProgress > stepDurationFrames / 2) {
+    const horizProgress = ((stepProgress - stepDurationFrames / 2) / (stepDurationFrames / 2));
+    ctx.lineTo(rightX + 40 * horizProgress, endY);
+  }
+  ctx.stroke();
+
+  // Draw moving head circle
+  ctx.fillStyle = 'orange';
+  ctx.shadowColor = 'rgba(255,165,0,0.7)';
+  ctx.shadowBlur = 15;
+
+  let interpX = rightX;
+  if (stepProgress > stepDurationFrames / 2) {
+    const horizProgress = ((stepProgress - stepDurationFrames / 2) / (stepDurationFrames / 2));
+    interpX = rightX + 40 * horizProgress;
+  }
+  ctx.beginPath();
+  ctx.arc(interpX, interpY, 12, 0, 2 * Math.PI);
   ctx.fill();
   ctx.shadowBlur = 0;
 
+  // Draw label with current cylinder
   ctx.fillStyle = '#222';
   ctx.font = 'bold 14px Arial';
-  ctx.fillText(`Cylinder: ${Math.round(pathPoints[index] + (pathPoints[index + 1] - pathPoints[index]) * progress)}`, currX - 30, 80);
+  ctx.fillText(`Cylinder: ${order[currentStep]}`, interpX + 15, interpY + 5);
 
-  if (animationFrameCount >= framesPerStep) {
-    index++;
-    animationFrameCount = 0;
+  stepProgress++;
+  if (stepProgress > stepDurationFrames) {
+    stepProgress = 0;
+    currentStep++;
   }
-
-  animationId = requestAnimationFrame(animateSmooth);
+  animationId = requestAnimationFrame(() => animateZigzag(order, head, maxCylinder));
 }
 
-function getX(cyl) {
-  const margin = 40;
-  const usableWidth = canvas.width - 2 * margin;
-  return margin + (cyl / parseInt(maxCylinderInput.value)) * usableWidth;
-}
+const stepDurationFrames = 60;
 
 function displayOrderTable(order, head) {
   orderTableBody.innerHTML = '';
@@ -258,12 +284,9 @@ runBtn.onclick = () => {
   throughputElem.textContent = throughput;
 
   displayOrderTable(result.order, head);
-  drawDisk(requests, head, result.order, maxCylinder);
+  drawZigzag(requests, head, result.order, maxCylinder);
 
-  // Initialize animation variables
-  index = 0;
-  animationFrameCount = 0;
-  pathPoints = [head, ...result.order];
-
-  animationId = requestAnimationFrame(animateSmooth);
+  currentStep = 0;
+  stepProgress = 0;
+  animationId = requestAnimationFrame(() => animateZigzag(result.order, head, maxCylinder));
 };
