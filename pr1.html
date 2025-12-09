@@ -346,7 +346,6 @@
       case 'SSTF': result = sstf(requests, head); break;
       case 'SCAN': result = scan(requests, head, maxCylinder); break;
       case 'CSCAN': result = cscan(requests, head, maxCylinder); break;
-      default: alert('Unknown algorithm'); return;
     }
 
     const avgSeek = (result.totalSeek / requests.length).toFixed(2);
@@ -364,3 +363,4 @@
 
 </body>
 </html>
+
