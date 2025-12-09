@@ -5,14 +5,44 @@ const requestsInput = document.getElementById('requests');
 const headInput = document.getElementById('head');
 const maxCylinderInput = document.getElementById('maxCylinder');
 const algorithmSelect = document.getElementById('algorithm');
-const runBtn = document.getElementById('runBtn');
+
+const startBtn = document.getElementById('startBtn');
+const playBtn = document.getElementById('playBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+const resetBtn = document.getElementById('resetBtn');
+const speedSlider = document.getElementById('speedSlider');
+const speedValue = document.getElementById('speedValue');
 
 const totalSeekElem = document.getElementById('totalSeek');
 const avgSeekElem = document.getElementById('avgSeek');
-const throughputElem = document.getElementById('throughput');
-const orderTableBody = document.querySelector('#orderTable tbody');
+const numRequestsElem = document.getElementById('numRequests');
+const currentStepDisplayElem = document.getElementById('currentStepDisplay');
+const totalStepsElem = document.getElementById('totalSteps');
 
-let animationId;
+const algorithmDescriptionElem = document.getElementById('algorithmDescription');
+const serviceOrderElem = document.getElementById('serviceOrder');
+const stepDetailsElem = document.getElementById('stepDetails');
+
+let simulationState = null;
+let animationId = null;
+let isPlaying = false;
+let currentStep = 0;
+let animationSpeed = 3;
+
+// Algorithm descriptions
+const algorithmDescriptions = {
+  FCFS: "First Come First Serve (FCFS) services disk requests in the order they arrive in the queue. This is the simplest algorithm but may not provide optimal seek time.",
+  SSTF: "Shortest Seek Time First (SSTF) selects the request closest to the current head position. This minimizes seek time for each individual request but can cause starvation.",
+  SCAN: "SCAN (Elevator Algorithm) moves the head in one direction servicing requests until reaching the end, then reverses direction. This prevents starvation and provides fair service.",
+  CSCAN: "Circular SCAN (C-SCAN) moves the head in one direction servicing requests, then jumps back to the beginning without servicing requests on the return trip. This provides more uniform wait times."
+};
+
+speedSlider.addEventListener('input', (e) => {
+  animationSpeed = parseInt(e.target.value);
+  speedValue.textContent = `${animationSpeed}x`;
+});
 
 function parseRequests(str) {
   return str.split(',').map(x => parseInt(x.trim())).filter(x => !isNaN(x));
@@ -22,242 +52,258 @@ function clampRequests(requests, maxCylinder) {
   return requests.filter(r => r >= 0 && r <= maxCylinder);
 }
 
+function simulateUserOrder(requests, head) {
+  const order = [...requests];
+  const steps = [];
+  let totalSeek = 0;
+  let current = head;
+
+  for (let i = 0; i < order.length; i++) {
+    const seek = Math.abs(order[i] - current);
+    totalSeek += seek;
+    steps.push({
+      from: current,
+      to: order[i],
+      seek: seek,
+      cumulative: totalSeek,
+      explanation: `Moving from cylinder ${current} to ${order[i]} (seek distance: ${seek})`
+    });
+    current = order[i];
+  }
+
+  return { order, totalSeek, steps };
+}
+
 function fcfs(requests, head) {
   const order = [...requests];
-  let totalSeek = 0;
-  let last = head;
-  for (let r of requests) {
-    totalSeek += Math.abs(r - last);
-    last = r;
-  }
-  return { order, totalSeek };
-}
-
-function sstf(requests, head) {
-  let reqs = [...requests];
-  let order = [];
+  const steps = [];
   let totalSeek = 0;
   let current = head;
-
-  while (reqs.length > 0) {
-    let closestIdx = 0;
-    let closestDist = Math.abs(reqs[0] - current);
-    for (let i = 1; i < reqs.length; i++) {
-      const dist = Math.abs(reqs[i] - current);
-      if (dist < closestDist) {
-        closestDist = dist;
-        closestIdx = i;
-      }
-    }
-    order.push(reqs[closestIdx]);
-    totalSeek += closestDist;
-    current = reqs[closestIdx];
-    reqs.splice(closestIdx, 1);
+  for (let i = 0; i < order.length; i++) {
+    const seek = Math.abs(order[i] - current);
+    totalSeek += seek;
+    steps.push({
+      from: current,
+      to: order[i],
+      seek: seek,
+      cumulative: totalSeek,
+      explanation: `Moving from cylinder ${current} to ${order[i]} (seek distance: ${seek})`
+    });
+    current = order[i];
   }
-  return { order, totalSeek };
+  return { order, totalSeek, steps };
 }
 
-function scan(requests, head, maxCylinder) {
-  let order = [];
-  let totalSeek = 0;
-  let current = head;
-  let left = requests.filter(r => r < head).sort((a,b) => b - a);
-  let right = requests.filter(r => r >= head).sort((a,b) => a - b);
+function sstf(requests, head) { /*...*/ }
+function scan(requests, head, maxCylinder) { /*...*/ }
+function cscan(requests, head, maxCylinder) { /*...*/ }
 
-  for (let r of right) {
-    totalSeek += Math.abs(r - current);
-    current = r;
-    order.push(r);
-  }
-  if (right.length > 0 && current !== maxCylinder) {
-    totalSeek += (maxCylinder - current);
-    current = maxCylinder;
-  }
-  for (let r of left) {
-    totalSeek += Math.abs(r - current);
-    current = r;
-    order.push(r);
-  }
-  return { order, totalSeek };
-}
-
-function cscan(requests, head, maxCylinder) {
-  let order = [];
-  let totalSeek = 0;
-  let current = head;
-  let left = requests.filter(r => r < head).sort((a,b) => a - b);
-  let right = requests.filter(r => r >= head).sort((a,b) => a - b);
-
-  for (let r of right) {
-    totalSeek += Math.abs(r - current);
-    current = r;
-    order.push(r);
-  }
-  if (right.length > 0 && current !== maxCylinder) {
-    totalSeek += (maxCylinder - current);
-    current = maxCylinder;
-  }
-  totalSeek += maxCylinder; // jump from end to start
-  current = 0;
-  for (let r of left) {
-    totalSeek += Math.abs(r - current);
-    current = r;
-    order.push(r);
-  }
-  return { order, totalSeek };
-}
-
-function drawZigzag(requests, head, order, maxCylinder) {
+function drawVisualization(state, stepIndex) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.font = '12px Arial';
-  ctx.fillStyle = '#444';
-
-  const marginTop = 20;
-  const marginBottom = 20;
-  const usableHeight = canvas.height - marginTop - marginBottom;
-
-  function getY(cyl) {
-    return marginTop + usableHeight * (cyl / maxCylinder);
+  
+  const margin = 60;
+  const trackY = 200;
+  const usableWidth = canvas.width - 2 * margin;
+  const maxCyl = state.maxCylinder;
+  
+  function getX(cyl) {
+    return margin + (cyl / maxCyl) * usableWidth;
   }
-
-  // Left vertical line (cylinder scale)
-  const leftX = 80;
+  
+  ctx.fillStyle = '#333';
+  ctx.font = 'bold 18px Arial';
+  ctx.fillText(`${state.algorithm}`, 20, 30);
+  
   ctx.strokeStyle = '#666';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(leftX, marginTop);
-  ctx.lineTo(leftX, canvas.height - marginBottom);
-  ctx.stroke();
-
-  // Right vertical line (step markers)
-  const rightX = 300;
-  ctx.beginPath();
-  ctx.moveTo(rightX, marginTop);
-  ctx.lineTo(rightX, canvas.height - marginBottom);
-  ctx.stroke();
-
-  // Cylinder ticks and labels on left
-  ctx.fillStyle = '#666';
-  for (let cyl = 0; cyl <= maxCylinder; cyl += Math.max(1, Math.floor(maxCylinder / 10))) {
-    let y = getY(cyl);
-    ctx.beginPath();
-    ctx.moveTo(leftX - 6, y);
-    ctx.lineTo(leftX + 6, y);
-    ctx.stroke();
-    ctx.fillText(cyl, leftX - 40, y + 4);
-  }
-
-  // Draw request points on left line
-  ctx.fillStyle = 'blue';
-  for (const r of requests) {
-    const y = getY(r);
-    ctx.beginPath();
-    ctx.arc(leftX, y, 6, 0, 2 * Math.PI);
-    ctx.fill();
-  }
-
-  // Initial head position
-  ctx.fillStyle = 'green';
-  ctx.beginPath();
-  ctx.arc(leftX, getY(head), 8, 0, 2 * Math.PI);
-  ctx.fill();
-}
-
-let currentStep = 0;
-let stepProgress = 0;
-
-function animateZigzag(order, head, maxCylinder) {
-  const marginTop = 20;
-  const marginBottom = 20;
-  const usableHeight = canvas.height - marginTop - marginBottom;
-  const leftX = 80;
-  const rightX = 300;
-
-  function getY(cyl) {
-    return marginTop + usableHeight * (cyl / maxCylinder);
-  }
-
-  if (currentStep >= order.length) {
-    cancelAnimationFrame(animationId);
-    return;
-  }
-
-  // Clear animation area (right side)
-  ctx.clearRect(leftX + 10, 0, canvas.width - leftX - 10, canvas.height);
-
-  // Draw zigzag path trace so far
-  ctx.strokeStyle = 'red';
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo(rightX, getY(head));
-  for (let i = 0; i < currentStep; i++) {
-    ctx.lineTo(rightX, getY(order[i]));
-    ctx.lineTo(rightX + 40, getY(order[i]));
-  }
-
-  // Partial move animation for current step:
-  let startY = currentStep === 0 ? getY(head) : getY(order[currentStep - 1]);
-  let endY = getY(order[currentStep]);
-  let interpY = startY + (endY - startY) * (stepProgress / stepDurationFrames);
-
-  ctx.lineTo(rightX, interpY);
-
-  if (stepProgress > stepDurationFrames / 2) {
-    const horizProgress = ((stepProgress - stepDurationFrames / 2) / (stepDurationFrames / 2));
-    ctx.lineTo(rightX + 40 * horizProgress, endY);
-  }
+  ctx.moveTo(margin, trackY);
+  ctx.lineTo(canvas.width - margin, trackY);
   ctx.stroke();
-
-  // Draw moving head circle
-  ctx.fillStyle = 'orange';
-  ctx.shadowColor = 'rgba(255,165,0,0.7)';
-  ctx.shadowBlur = 15;
-
-  let interpX = rightX;
-  if (stepProgress > stepDurationFrames / 2) {
-    const horizProgress = ((stepProgress - stepDurationFrames / 2) / (stepDurationFrames / 2));
-    interpX = rightX + 40 * horizProgress;
+  
+  ctx.fillStyle = '#888';
+  ctx.font = '11px Arial';
+  const step = Math.max(20, Math.floor(maxCyl / 10));
+  for (let cyl = 0; cyl <= maxCyl; cyl += step) {
+    const x = getX(cyl);
+    ctx.beginPath();
+    ctx.moveTo(x, trackY - 8);
+    ctx.lineTo(x, trackY + 8);
+    ctx.stroke();
+    ctx.fillText(cyl, x - 10, trackY + 25);
   }
-  ctx.beginPath();
-  ctx.arc(interpX, interpY, 12, 0, 2 * Math.PI);
-  ctx.fill();
-  ctx.shadowBlur = 0;
-
-  // Draw label with current cylinder
-  ctx.fillStyle = '#222';
-  ctx.font = 'bold 14px Arial';
-  ctx.fillText(`Cylinder: ${order[currentStep]}`, interpX + 15, interpY + 5);
-
-  stepProgress++;
-  if (stepProgress > stepDurationFrames) {
-    stepProgress = 0;
-    currentStep++;
-  }
-  animationId = requestAnimationFrame(() => animateZigzag(order, head, maxCylinder));
-}
-
-const stepDurationFrames = 60;
-
-function displayOrderTable(order, head) {
-  orderTableBody.innerHTML = '';
-  let cumulativeSeek = 0;
-  let last = head;
-  order.forEach((cyl, i) => {
-    cumulativeSeek += Math.abs(cyl - last);
-    last = cyl;
-    const row = document.createElement('tr');
-    row.innerHTML = `<td>${i + 1}</td><td>${cyl}</td><td>${cumulativeSeek}</td>`;
-    orderTableBody.appendChild(row);
+  
+  state.requests.forEach((req) => {
+    const x = getX(req);
+    const isServiced = stepIndex >= 0 && state.order.slice(0, stepIndex + 1).includes(req);
+    const isCurrent = stepIndex >= 0 && state.steps[stepIndex] && state.steps[stepIndex].to === req;
+    
+    if (isServiced) {
+      ctx.fillStyle = isCurrent ? '#ff6600' : '#4CAF50';
+    } else {
+      ctx.fillStyle = '#2196F3';
+    }
+    
+    ctx.beginPath();
+    ctx.arc(x, trackY, 8, 0, 2 * Math.PI);
+    ctx.fill();
+    
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 12px Arial';
+    ctx.fillText(req, x - 8, trackY - 15);
   });
+  
+  const initialX = getX(state.initialHead);
+  ctx.fillStyle = '#9C27B0';
+  ctx.beginPath();
+  ctx.arc(initialX, trackY, 10, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 10px Arial';
+  ctx.fillText('S', initialX - 4, trackY + 4);
+  
+  if (stepIndex >= 0 && stepIndex < state.steps.length) {
+    const currentPos = state.steps[stepIndex].to;
+    const currentX = getX(currentPos);
+    
+    ctx.fillStyle = '#FF5722';
+    ctx.shadowColor = 'rgba(255, 87, 34, 0.5)';
+    ctx.shadowBlur = 15;
+    ctx.beginPath();
+    ctx.arc(currentX, trackY, 14, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 11px Arial';
+    ctx.fillText('H', currentX - 5, trackY + 4);
+  }
+  
+  if (stepIndex >= 0) {
+    ctx.strokeStyle = '#ff6600';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(initialX, trackY + 40);
+    for (let i = 0; i <= stepIndex && i < state.steps.length; i++) {
+      const x = getX(state.steps[i].to);
+      ctx.lineTo(x, trackY + 40);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  
+  const legendY = canvas.height - 40;
+  ctx.font = '12px Arial';
+  ctx.fillStyle = '#9C27B0';
+  ctx.beginPath();
+  ctx.arc(margin, legendY, 8, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.fillStyle = '#333';
+  ctx.fillText('Start Position', margin + 15, legendY + 4);
+  
+  ctx.fillStyle = '#2196F3';
+  ctx.beginPath();
+  ctx.arc(margin + 150, legendY, 8, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.fillStyle = '#333';
+  ctx.fillText('Pending Request', margin + 165, legendY + 4);
+  
+  ctx.fillStyle = '#4CAF50';
+  ctx.beginPath();
+  ctx.arc(margin + 300, legendY, 8, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.fillStyle = '#333';
+  ctx.fillText('Serviced Request', margin + 315, legendY + 4);
+  
+  ctx.fillStyle = '#FF5722';
+  ctx.beginPath();
+  ctx.arc(margin + 450, legendY, 8, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.fillStyle = '#333';
+  ctx.fillText('Current Head', margin + 465, legendY + 4);
 }
 
-runBtn.onclick = () => {
-  if (animationId) cancelAnimationFrame(animationId);
+function updateUI(state, stepIndex) {
+  totalSeekElem.textContent = stepIndex >= 0 ? state.steps[stepIndex].cumulative : 0;
+  avgSeekElem.textContent = stepIndex >= 0 ? (state.steps[stepIndex].cumulative / (stepIndex + 1)).toFixed(2) : '0';
+  numRequestsElem.textContent = state.requests.length;
+  currentStepDisplayElem.textContent = stepIndex + 1;
+  totalStepsElem.textContent = state.steps.length;
+  
+  algorithmDescriptionElem.innerHTML = `<p><strong>${state.algorithm}</strong>: ${algorithmDescriptions[state.algorithm]}</p>`;
+  
+  let orderHTML = '<p><strong>Order:</strong> ' + state.initialHead;
+  for (let i = 0; i <= stepIndex && i < state.order.length; i++) {
+    orderHTML += ` → <span class="highlight">${state.order[i]}</span>`;
+  }
+  for (let i = stepIndex + 1; i < state.order.length; i++) {
+    orderHTML += ` → ${state.order[i]}`;
+  }
+  orderHTML += '</p>';
+  serviceOrderElem.innerHTML = orderHTML;
+  
+  if (stepIndex >= 0 && stepIndex < state.steps.length) {
+    const step = state.steps[stepIndex];
+    stepDetailsElem.innerHTML = `
+      <p><strong>Step ${stepIndex + 1}:</strong></p>
+      <p>${step.explanation}</p>
+      <p><strong>Seek Distance:</strong> ${step.seek}</p>
+      <p><strong>Cumulative Seek:</strong> ${step.cumulative}</p>
+    `;
+  } else {
+    stepDetailsElem.innerHTML = '<p>Simulation not started</p>';
+  }
+}
+
+function enableControls(enable) {
+  playBtn.disabled = !enable;
+  pauseBtn.disabled = !enable;
+  prevBtn.disabled = !enable;
+  nextBtn.disabled = !enable;
+  resetBtn.disabled = !enable;
+}
+
+function goToStep(stepIndex) {
+  if (!simulationState) return;
+  
+  currentStep = Math.max(0, Math.min(stepIndex, simulationState.steps.length - 1));
+  drawVisualization(simulationState, currentStep);
+  updateUI(simulationState, currentStep);
+}
+
+async function playAnimation() {
+  if (!simulationState || isPlaying) return;
+  
+  isPlaying = true;
+  playBtn.disabled = true;
+  pauseBtn.disabled = false;
+  
+  while (isPlaying && currentStep < simulationState.steps.length - 1) {
+    currentStep++;
+    goToStep(currentStep);
+    
+    const delay = 1000 / animationSpeed;
+    await new Promise(resolve => setTimeout(resolve, delay));
+  }
+  
+  isPlaying = false;
+  playBtn.disabled = false;
+  pauseBtn.disabled = true;
+  
+  if (currentStep >= simulationState.steps.length - 1) {
+    currentStep = simulationState.steps.length - 1;
+  }
+}
+
+startBtn.onclick = () => {
   let requests = parseRequests(requestsInput.value);
   const head = parseInt(headInput.value);
   const maxCylinder = parseInt(maxCylinderInput.value);
+  const algorithm = algorithmSelect.value;
+  
   requests = clampRequests(requests, maxCylinder);
-
+  
   if (requests.length === 0) {
     alert('Please enter valid disk requests within max cylinder range.');
     return;
@@ -266,27 +312,66 @@ runBtn.onclick = () => {
     alert('Initial head position must be within 0 and max cylinder.');
     return;
   }
-
+  
   let result;
-  switch (algorithmSelect.value) {
-    case 'FCFS': result = fcfs(requests, head); break;
-    case 'SSTF': result = sstf(requests, head); break;
-    case 'SCAN': result = scan(requests, head, maxCylinder); break;
-    case 'CSCAN': result = cscan(requests, head, maxCylinder); break;
-    default: alert('Unknown algorithm'); return;
+    switch (algorithm) {
+      case 'FCFS': result = fcfs(requests, head); break;
+      case 'SSTF': result = sstf(requests, head); break;
+      case 'SCAN': result = scan(requests, head, maxCylinder); break;
+      case 'CSCAN': result = cscan(requests, head, maxCylinder); break;
   }
+  
+  simulationState = {
+    requests,
+    initialHead: head,
+    maxCylinder,
+    algorithm,
+    ...result
+  };
+  
+  currentStep = -1;
+  isPlaying = false;
+  
+  enableControls(true);
+  drawVisualization(simulationState, -1);
+  updateUI(simulationState, -1);
+  
+  setTimeout(() => playAnimation(), 500);
+};
 
-  const avgSeek = (result.totalSeek / requests.length).toFixed(2);
-  const throughput = (requests.length / (result.totalSeek / 1000)).toFixed(2);
+playBtn.onclick = () => playAnimation();
 
-  totalSeekElem.textContent = result.totalSeek;
-  avgSeekElem.textContent = avgSeek;
-  throughputElem.textContent = throughput;
+pauseBtn.onclick = () => {
+  isPlaying = false;
+  playBtn.disabled = false;
+  pauseBtn.disabled = true;
+};
 
-  displayOrderTable(result.order, head);
-  drawZigzag(requests, head, result.order, maxCylinder);
+prevBtn.onclick = () => {
+  if (simulationState && currentStep > 0) {
+    isPlaying = false;
+    playBtn.disabled = false;
+    pauseBtn.disabled = true;
+    goToStep(currentStep - 1);
+  }
+};
 
-  currentStep = 0;
-  stepProgress = 0;
-  animationId = requestAnimationFrame(() => animateZigzag(result.order, head, maxCylinder));
+nextBtn.onclick = () => {
+  if (simulationState && currentStep < simulationState.steps.length - 1) {
+    isPlaying = false;
+    playBtn.disabled = false;
+    pauseBtn.disabled = true;
+    goToStep(currentStep + 1);
+  }
+};
+
+resetBtn.onclick = () => {
+  isPlaying = false;
+  currentStep = -1;
+  if (simulationState) {
+    drawVisualization(simulationState, -1);
+    updateUI(simulationState, -1);
+  }
+  playBtn.disabled = false;
+  pauseBtn.disabled = true;
 };
