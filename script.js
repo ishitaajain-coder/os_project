@@ -79,6 +79,7 @@ function fcfs(requests, head) {
   const steps = [];
   let totalSeek = 0;
   let current = head;
+  
   for (let i = 0; i < order.length; i++) {
     const seek = Math.abs(order[i] - current);
     totalSeek += seek;
@@ -91,12 +92,174 @@ function fcfs(requests, head) {
     });
     current = order[i];
   }
+  
   return { order, totalSeek, steps };
 }
 
-function sstf(requests, head) { /*...*/ }
-function scan(requests, head, maxCylinder) { /*...*/ }
-function cscan(requests, head, maxCylinder) { /*...*/ }
+function sstf(requests, head) {
+  let remaining = [...requests];
+  const order = [];
+  const steps = [];
+  let totalSeek = 0;
+  let current = head;
+  
+  while (remaining.length > 0) {
+    let closestIdx = 0;
+    let closestDist = Math.abs(remaining[0] - current);
+    
+    for (let i = 1; i < remaining.length; i++) {
+      const dist = Math.abs(remaining[i] - current);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closestIdx = i;
+      }
+    }
+    
+    const next = remaining[closestIdx];
+    order.push(next);
+    totalSeek += closestDist;
+    
+    steps.push({
+      from: current,
+      to: next,
+      seek: closestDist,
+      cumulative: totalSeek,
+      explanation: `Selected cylinder ${next} (closest to ${current}, distance: ${closestDist}). Remaining: [${remaining.filter((_, i) => i !== closestIdx).join(', ')}]`
+    });
+    
+    current = next;
+    remaining.splice(closestIdx, 1);
+  }
+  
+  return { order, totalSeek, steps };
+}
+
+function scan(requests, head, maxCylinder) {
+  const order = [];
+  const steps = [];
+  let totalSeek = 0;
+  let current = head;
+  
+  const right = requests.filter(r => r >= head).sort((a, b) => a - b);
+  
+  const left = requests.filter(r => r < head).sort((a, b) => b - a);
+  
+  for (const r of right) {
+    const seek = Math.abs(r - current);
+    totalSeek += seek;
+    steps.push({
+      from: current,
+      to: r,
+      seek: seek,
+      cumulative: totalSeek,
+      explanation: `RIGHT: ${current} → ${r} (distance: ${seek})`
+    });
+    order.push(r);
+    current = r;
+  }
+  
+  if (right.length > 0 && current !== maxCylinder) {
+    const seek = maxCylinder - current;
+    totalSeek += seek;
+    steps.push({
+      from: current,
+      to: maxCylinder,
+      seek: seek,
+      cumulative: totalSeek,
+      explanation: `Disk END: ${current} → ${maxCylinder} (distance: ${seek})`
+    });
+    order.push(maxCylinder);
+    current = maxCylinder;
+  }
+  
+  for (const r of left) {
+    const seek = Math.abs(r - current);
+    totalSeek += seek;
+    steps.push({
+      from: current,
+      to: r,
+      seek: seek,
+      cumulative: totalSeek,
+      explanation: `LEFT: ${current} → ${r} (distance: ${seek})`
+    });
+    order.push(r);
+    current = r;
+  }
+  
+  return { order, totalSeek, steps };
+}
+
+function cscan(requests, head, maxCylinder) {
+  const order = [];
+  const steps = [];
+  let totalSeek = 0;
+  let current = head;
+  
+  // Right requests (≥ head) sorted ASCENDING
+  const right = requests.filter(r => r >= head).sort((a, b) => a - b);
+  
+  // Left requests (< head) sorted ASCENDING  
+  const left = requests.filter(r => r < head).sort((a, b) => a - b);
+  
+  // Step 1: Move RIGHT servicing right requests
+  for (const r of right) {
+    const seek = Math.abs(r - current);
+    totalSeek += seek;
+    steps.push({
+      from: current,
+      to: r,
+      seek: seek,
+      cumulative: totalSeek,
+      explanation: `Moving right: from ${current} to ${r} (distance: ${seek})`
+    });
+    order.push(r);
+    current = r;
+  }
+  
+  // Step 2: Move to cylinder END (199)
+  if (right.length > 0 && current !== maxCylinder) {
+    const seek = maxCylinder - current;
+    totalSeek += seek;
+    steps.push({
+      from: current,
+      to: maxCylinder,
+      seek: seek,
+      cumulative: totalSeek,
+      explanation: `Reach disk end: ${current} to ${maxCylinder} (distance: ${seek})`
+    });
+    current = maxCylinder;
+  }
+  
+  // Step 3: Jump to START (0)
+  const jumpSeek = maxCylinder - 0;
+  totalSeek += jumpSeek;
+  steps.push({
+    from: current,
+    to: 0,
+    seek: jumpSeek,
+    cumulative: totalSeek,
+    explanation: `Circular jump: ${current} → 0 (distance: ${jumpSeek})`
+  });
+  current = 0;
+  
+  // Step 4: Service LEFT requests (now moving RIGHT from 0)
+  for (const r of left) {
+    const seek = Math.abs(r - current);
+    totalSeek += seek;
+    steps.push({
+      from: current,
+      to: r,
+      seek: seek,
+      cumulative: totalSeek,
+      explanation: `From start → ${r}: ${current} to ${r} (distance: ${seek})`
+    });
+    order.push(r);
+    current = r;
+  }
+  
+  return { order, totalSeek, steps };
+}
+
 
 function drawVisualization(state, stepIndex) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
